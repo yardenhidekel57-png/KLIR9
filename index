@@ -685,9 +685,9 @@ const CONFIG = {
   // and this array is only the fallback shown before that first fetch
   // resolves, or if the Worker isn't reachable. Fill in noticesApiUrl
   // with your deployed Worker's URL, e.g.
-  // "https://klir7-notices.<your-subdomain>.workers.dev/api/notices".
+  // "https://klir9-notices.<your-subdomain>.workers.dev/api/notices".
   notices: [],
-  noticesApiUrl: "https://klir7-notices.yardenhidekel57.workers.dev/api/notices",
+  noticesApiUrl: "https://klir9-notices.yardenhidekel57.workers.dev/api/notices",
   noticesRefreshMs: 3 * 60 * 1000,
 
   // Shown only for an instant before the live news feed loads, or if
