@@ -1440,8 +1440,21 @@ function init(){
   fetchNotices();
   setInterval(fetchNotices, CONFIG.noticesRefreshMs);
 
+  // Every heartbeat POST is a Cloudflare Workers KV *write*, and the free
+  // tier caps writes at 1,000/day for the WHOLE account — shared across
+  // every building's Worker, not per-board (an earlier 2-minute interval
+  // was ~720 writes/day from a single board alone — most of the entire
+  // account's daily budget — which is what triggered Cloudflare's "50%
+  // of daily limit" warning email; unrelated to how many notices the
+  // committee actually posts, which is a separate, rare, deliberate
+  // write). Pushed down further, to once an hour, at the user's request
+  // — only ~24 writes/day per building, room for dozens of buildings on
+  // one account. This is purely a background "is the board itself still
+  // running" signal (see the status card in worker.js's admin page); an
+  // hour of lag before that status card notices an outage is an
+  // acceptable trade for the much lower KV usage.
   sendHeartbeat();
-  setInterval(sendHeartbeat, 2 * 60 * 1000);
+  setInterval(sendHeartbeat, 60 * 60 * 1000);
 }
 
 document.addEventListener('DOMContentLoaded', init);
