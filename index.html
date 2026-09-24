@@ -247,7 +247,7 @@
   }
   .forecast-item .day{ font-size:18px; font-weight:700; color:#8a6a28; margin-bottom:8px; }
   .forecast-item.today .day{ color:#6b4c12; font-weight:800; }
-  .forecast-item .icon{ font-size:38px; }
+  .forecast-item .icon{ display:flex; justify-content:center; align-items:center; height:38px; }
   .forecast-item .range{ font-family:'Assistant', sans-serif; font-size:23px; font-weight:800; margin-top:8px; direction:ltr; color:var(--text-navy); }
   .forecast-item .range .lo{ color:var(--text-navy-soft); font-weight:600; }
 
@@ -290,17 +290,21 @@
   .mgmt-company{
     display:flex;
     align-items:center;
-    gap:14px;
-    margin-top:14px;
-    padding-top:16px;
+    gap:19px;
+    margin-top:16px;
+    padding-top:19px;
     border-top:1px solid var(--hairline);
   }
+  /* Enlarged from the original 50px+small-text (which left visible empty
+     space below this block — the card fills the available side-column
+     height but the small logo+text didn't) — dialed back down slightly
+     from a first pass that was a bit too big. */
   .mgmt-company img{
-    width:50px; height:50px; border-radius:11px; flex-shrink:0;
-    background:#fff; padding:2px; border:1px solid var(--gold-dim);
+    width:90px; height:90px; border-radius:15px; flex-shrink:0;
+    background:#fff; padding:4px; border:1px solid var(--gold-dim);
   }
-  .mgmt-company .mgmt-company-text{ font-size:16px; font-weight:700; color:var(--text-navy-soft); line-height:1.38; }
-  .mgmt-company .mgmt-company-text b{ display:block; color:var(--text-navy); font-size:17.5px; }
+  .mgmt-company .mgmt-company-text{ font-size:20px; font-weight:700; color:var(--text-navy-soft); line-height:1.4; }
+  .mgmt-company .mgmt-company-text b{ display:block; color:var(--text-navy); font-size:26px; margin-top:2px; }
 
   .mgmt-bullet{
     justify-content:flex-start;
@@ -337,6 +341,18 @@
     justify-content:flex-end;
   }
   .slide.active{ opacity:1; }
+  /* Slides with no photo (see renderSlideshow(): a slide with no `image`
+     field gets this instead of background-image) — a themed gradient
+     using the board's own palette variables, so it auto-matches
+     whichever color theme is in use. This exists because slides that
+     depended on an external stock-photo URL turned out unreliable on
+     some TVs' built-in browsers (older/embedded browsers can fail to
+     decode the photo host's auto-negotiated image format, showing only
+     the caption with no image) — a plain gradient has zero network
+     dependency and always renders identically everywhere. */
+  .slide.no-photo{
+    background-image: linear-gradient(160deg, var(--navy-panel) 0%, var(--navy-deep) 65%, var(--navy-panel-2) 100%);
+  }
   .slide .scrim{
     /* dark gradient over the photo so the caption stays legible,
        plus a faint gold wash to tie the photo into the palette */
@@ -453,7 +469,8 @@
   ::-webkit-scrollbar-thumb{ background:var(--gold-dim); border-radius:10px; }
 
   /* =========================================================
-     BOTTOM TICKER — walla live feed (ynet kept as fallback source)
+     BOTTOM TICKER — ynet live feed (rss2json direct fetch, own Worker as
+     fallback — see fetchNewsTicker() near the bottom of this script)
   ========================================================= */
   footer.ticker-bar{
     flex-shrink:0;
@@ -480,9 +497,13 @@
     gap:4px;
     border-left:1px solid var(--hairline);
   }
+  /* Ynet's real wordmark: bold lowercase "ynet" in white, on its actual
+     brand red, in a rounded badge — not italic, not navy (that was a
+     generic placeholder badge, not an attempt at the real logo). */
   .ticker-source-box .source-mark{
-    font-size:21px; font-weight:900; font-style:italic; color:#fff;
-    background:#0d2c6b; padding:2px 11px; border-radius:5px; letter-spacing:0.5px;
+    font-size:22px; font-weight:900; font-style:normal; color:#fff;
+    background:#ee1c25; padding:4px 15px; border-radius:8px; letter-spacing:0.3px;
+    text-transform:lowercase; box-shadow:0 2px 8px rgba(0,0,0,0.35);
   }
   .ticker-source-box .live-dot{ display:flex; align-items:center; gap:4px; font-size:9px; font-weight:700; color:var(--text-dim); }
   .ticker-source-box .live-dot::before{
@@ -493,7 +514,7 @@
 
   .ticker-viewport{ flex:1; overflow:hidden; height:100%; display:flex; align-items:center; }
   .ticker-track{ display:inline-flex; white-space:nowrap; animation:ticker-scroll 65s linear infinite; }
-  .ticker-item{ display:inline-flex; align-items:center; gap:10px; padding-left:70px; }
+  .ticker-item{ display:inline-flex; align-items:center; gap:10px; padding-left:60px; }
   .ticker-time{
     background:rgba(255,255,255,0.92); color:#7a1f10; font-weight:800; font-size:18px;
     padding:5px 14px; border-radius:16px; direction:ltr;
@@ -584,10 +605,10 @@
 
   </main>
 
-  <!-- ================= BOTTOM TICKER — WALLA ================= -->
+  <!-- ================= BOTTOM TICKER — YNET (primary), WALLA (fallback) ================= -->
   <footer class="ticker-bar">
     <div class="ticker-source-box">
-      <div class="source-mark">וואלה!</div>
+      <div class="source-mark">ynet</div>
       <div class="live-dot">LIVE</div>
     </div>
     <div class="ticker-viewport">
@@ -596,6 +617,21 @@
   </footer>
 
 </div>
+
+<!-- Hidden, silent, 1-second looping video — a fallback that keeps the
+     screen awake even on TV/embedded browsers that don't implement the
+     Screen Wake Lock API at all (common on smart-TV browsers like LG's
+     WebOS or older Samsung Tizen). Many platforms treat "a video is
+     actively playing" as a reason not to trigger the screensaver/sleep,
+     independent of the Wake Lock API, so this covers devices the API-
+     based approach above can't reach. Embedded as a data: URI (a couple
+     KB) so it has no network dependency at all — see requestKeepAwakeVideo()
+     near the end of this script. -->
+<video id="keepAwakeVideo" muted loop playsinline autoplay
+  style="position:fixed;left:0;top:0;width:1px;height:1px;opacity:0.01;pointer-events:none;">
+  <source type="video/mp4" src="data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAMtbW9vdgAAAGxtdmhkAAAAAAAAAAAAAAAAAAAD6AAAB9AAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAld0cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAB9AAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAIAAAACAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAAfQAAAAAAABAAAAAAHPbWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAABAAAAAgABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABem1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAATpzdGJsAAAAunN0c2QAAAAAAAAAAQAAAKphdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAIAAgBIAAAASAAAAAAAAAABFUxhdmM2MC4zMS4xMDIgbGlieDI2NAAAAAAAAAAAAAAAGP//AAAAMGF2Y0MBQsAe/+EAGGdCwB7ZH4iIwEQAAAMABAAAAwAIPFi5IAEABWjLg8sgAAAAEHBhc3AAAAABAAAAAQAAABRidHJ0AAAAAAAACkAAAApAAAAAGHN0dHMAAAAAAAAAAQAAAAIAAEAAAAAAFHN0c3MAAAAAAAAAAQAAAAEAAAAcc3RzYwAAAAAAAAABAAAAAQAAAAIAAAABAAAAHHN0c3oAAAAAAAAAAAAAAAIAAAKGAAAACgAAABRzdGNvAAAAAAAAAAEAAANdAAAAYnVkdGEAAABabWV0YQAAAAAAAAAhaGRscgAAAAAAAAAAbWRpcmFwcGwAAAAAAAAAAAAAAAAtaWxzdAAAACWpdG9vAAAAHWRhdGEAAAABAAAAAExhdmY2MC4xNi4xMDAAAAAIZnJlZQAAAphtZGF0AAACcAYF//9s3EXpvebZSLeWLNgg2SPu73gyNjQgLSBjb3JlIDE2NCByMzEwOCAzMWUxOWY5IC0gSC4yNjQvTVBFRy00IEFWQyBjb2RlYyAtIENvcHlsZWZ0IDIwMDMtMjAyMyAtIGh0dHA6Ly93d3cudmlkZW9sYW4ub3JnL3gyNjQuaHRtbCAtIG9wdGlvbnM6IGNhYmFjPTAgcmVmPTMgZGVibG9jaz0xOjA6MCBhbmFseXNlPTB4MToweDExMSBtZT1oZXggc3VibWU9NyBwc3k9MSBwc3lfcmQ9MS4wMDowLjAwIG1peGVkX3JlZj0xIG1lX3JhbmdlPTE2IGNocm9tYV9tZT0xIHRyZWxsaXM9MSA4eDhkY3Q9MCBjcW09MCBkZWFkem9uZT0yMSwxMSBmYXN0X3Bza2lwPTEgY2hyb21hX3FwX29mZnNldD0tMiB0aHJlYWRzPTEgbG9va2FoZWFkX3RocmVhZHM9MSBzbGljZWRfdGhyZWFkcz0wIG5yPTAgZGVjaW1hdGU9MSBpbnRlcmxhY2VkPTAgYmx1cmF5X2NvbXBhdD0wIGNvbnN0cmFpbmVkX2ludHJhPTAgYmZyYW1lcz0wIHdlaWdodHA9MCBrZXlpbnQ9MjUwIGtleWludF9taW49MSBzY2VuZWN1dD00MCBpbnRyYV9yZWZyZXNoPTAgcmNfbG9va2FoZWFkPTQwIHJjPWNyZiBtYnRyZWU9MSBjcmY9MjMuMCBxY29tcD0wLjYwIHFwbWluPTAgcXBtYXg9NjkgcXBzdGVwPTQgaXBfcmF0aW89MS40MCBhcT0xOjEuMDAAgAAAAA5liIQFv///D0UAAU9/gAAAAAZBmjgK+oA=">
+  <source type="video/webm" src="data:video/webm;base64,GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJChYECGFOAZwEAAAAAAAH7EU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHYTbuMU6uEElTDZ1OsggEeTbuMU6uEHFO7a1OsggHl7AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmsirXsYMPQkBNgI1MYXZmNjAuMTYuMTAwV0GNTGF2ZjYwLjE2LjEwMESJiECfQAAAAAAAFlSua8GuAQAAAAAAADjXgQFzxYh2hUetk/tq0JyBACK1nIN1bmSIgQCGhVZfVlA4g4EBI+ODhDuaygDgibCBArqBApqBAhJUw2f8c3OgY8CAZ8iaRaOHRU5DT0RFUkSHjUxhdmY2MC4xNi4xMDBzc9ZjwItjxYh2hUetk/tq0GfIoUWjh0VOQ09ERVJEh5RMYXZjNjAuMzEuMTAyIGxpYnZweGfIoUWjiERVUkFUSU9ORIeTMDA6MDA6MDIuMDAwMDAwMDAwAB9DtnXB54EAo6KBAACAEAIAnQEqAgACAAvHCIWFiJmEiD+CAAwNYAD+5rUAo5iBA+gAsQEALxH8ABgAMD/0DAAAAP7mtQAcU7trkbuPs4EAt4r3gQHxggGf8IED">
+</video>
 
 <script>
 /* =========================================================================
@@ -621,13 +657,15 @@ const CONFIG = {
     geonameid: 294071
   },
 
-  // 4 tiles, starting from today
+  // 4 tiles, starting from today. icon keys match WEATHER_ICONS below
+  // (sun / partly-cloudy / rain / snow) — see its comment for why these
+  // are drawn as SVG instead of emoji.
   weather: {
     days: [
-      { day: "היום", icon: "☀️", high: 24, low: 18 },
-      { day: "מחר", icon: "⛅", high: 25, low: 19 },
-      { day: "יום ד׳", icon: "🌤️", high: 27, low: 20 },
-      { day: "יום ה׳", icon: "☀️", high: 26, low: 19 }
+      { day: "היום", icon: "sun", high: 24, low: 18 },
+      { day: "מחר", icon: "partly-cloudy", high: 25, low: 19 },
+      { day: "יום ד׳", icon: "partly-cloudy", high: 27, low: 20 },
+      { day: "יום ה׳", icon: "sun", high: 26, low: 19 }
     ]
   },
 
@@ -654,13 +692,28 @@ const CONFIG = {
       icon: "🐾",
       title: "בעלי חיים בשטחי הבניין",
       text: "יש להסתובב עם בעלי חיים ברצועה בכל שטחי הבניין, ואין להאכיל בעלי חיים ברחבי הבניין.",
-      image: "https://images.unsplash.com/photo-1636998094055-ec16a40164f5?w=1600&h=1000&fit=crop&auto=format&q=80"
+      // Restored (was removed to chase the "no image on LG TV" bug) —
+      // the likely real cause is Unsplash's "auto=format" param, which
+      // negotiates WebP/AVIF based on the browser's Accept header; many
+      // embedded TV browsers (LG webOS especially) ADVERTISE webp
+      // support in that header without actually being able to decode it
+      // in an <img>/CSS background, so the image silently fails while
+      // the caption text (plain HTML) still renders fine — matching
+      // exactly what was reported. Forcing `fm=jpg` here makes Unsplash
+      // always return a plain JPEG regardless of what the browser
+      // claims to accept, which every TV browser can decode.
+      // If it *still* doesn't render on your specific TV, the fully
+      // bulletproof fix is to send me the actual photos and I'll embed
+      // them as base64 straight into this file (like the cleanliness
+      // graphic above) — that removes the network/format dependency
+      // completely, at the cost of a larger file.
+      image: "https://images.unsplash.com/photo-1636998094055-ec16a40164f5?w=1600&h=1000&fit=crop&fm=jpg&q=80"
     },
     {
       icon: "🧾",
       title: "תזכורת: דמי ועד בית",
       text: "מי שטרם שילם את דמי הוועד לחודש הנוכחי מתבקש להסדיר את התשלום בהקדם מול חברת הניהול.",
-      image: "https://images.unsplash.com/photo-1633158829875-e5316a358c6f?w=1600&h=1000&fit=crop&auto=format&q=80"
+      image: "https://images.unsplash.com/photo-1633158829875-e5316a358c6f?w=1600&h=1000&fit=crop&fm=jpg&q=80"
     }
   ],
 
@@ -693,19 +746,17 @@ const CONFIG = {
   // Shown only for an instant before the live news feed loads, or if
   // it's temporarily unreachable — kept obviously generic so it's
   // never mistaken for real (stale) news.
-  ticker: [
-    { time: "--:--", text: "מתחבר למבזקי חדשות…" }
-  ],
+  ticker: ["מתחבר למבזקי חדשות…"],
 
   news: {
-    // walla is primary (ynet's own feed kept lagging even after several
-    // fixes to the proxy layer); ynet stays as a redundant second
-    // source, tried only if walla doesn't come back fresh enough.
-    sources: [
-      { name: "walla", rssUrl: "https://rss.walla.co.il/feed/22", parseDate: wallaPubDateToMs, parseRss2Json: wallaRss2JsonPubDateToMs },
-      { name: "ynet", rssUrl: "https://www.ynet.co.il/Integration/StoryRss2.xml", parseDate: pubDateToMs }
-    ],
-    proxyUrl: "https://api.rss2json.com/v1/api.json?rss_url=",
+    // StoryRss1854.xml is specifically ynet's "מבזקים" (flash/breaking-
+    // news ticker) feed — <channel><title> is literally "ynet - מבזקים"
+    // — matching https://www.ynet.co.il/news/category/184 on the site.
+    // (StoryRss2.xml, used here previously, is ynet's GENERAL top-
+    // stories feed — different content, updated roughly hourly instead
+    // of every few minutes — that mismatch was reported as "the
+    // headlines look old".)
+    rssUrl: "https://www.ynet.co.il/Integration/StoryRss1854.xml",
     maxItems: 10,
     refreshMs: 5 * 60 * 1000
   },
@@ -722,12 +773,28 @@ function renderHeader(){
   document.getElementById('creditBadge').textContent = CONFIG.building.creditText;
 }
 
+// Weather icons were plain emoji (☀️/⛅/🌧️/🌨️) — many embedded TV
+// browsers (confirmed live on LG webOS) have no color-emoji font
+// installed and fall back to a plain black-and-white glyph instead,
+// which is exactly what was reported ("the weather icons are in black
+// and white"). Emoji color rendering depends on the OS/browser having a
+// color font available; there's no reliable way to force it from CSS.
+// Fixed by drawing the icons as inline SVG instead — flat shapes with
+// explicit fill colors, so they render identically (and in color)
+// everywhere, with zero font or network dependency.
+const WEATHER_ICONS = {
+  sun: `<svg viewBox="0 0 36 36" width="38" height="38"><circle cx="18" cy="18" r="8" fill="#FFB100"/><g stroke="#FFB100" stroke-width="2.6" stroke-linecap="round"><line x1="18" y1="2" x2="18" y2="6"/><line x1="18" y1="30" x2="18" y2="34"/><line x1="2" y1="18" x2="6" y2="18"/><line x1="30" y1="18" x2="34" y2="18"/><line x1="6.3" y1="6.3" x2="9.1" y2="9.1"/><line x1="26.9" y1="26.9" x2="29.7" y2="29.7"/><line x1="6.3" y1="29.7" x2="9.1" y2="26.9"/><line x1="26.9" y1="9.1" x2="29.7" y2="6.3"/></g></svg>`,
+  'partly-cloudy': `<svg viewBox="0 0 36 36" width="38" height="38"><circle cx="13" cy="12" r="6.5" fill="#FFB100"/><circle cx="13" cy="23" r="6" fill="#CBD5E1"/><circle cx="20" cy="20" r="7.5" fill="#CBD5E1"/><circle cx="26" cy="23" r="5.5" fill="#CBD5E1"/><rect x="11" y="21" width="17" height="8" rx="4" fill="#CBD5E1"/></svg>`,
+  rain: `<svg viewBox="0 0 36 36" width="38" height="38"><circle cx="12" cy="15" r="6" fill="#9AA9BC"/><circle cx="19" cy="12" r="7.5" fill="#9AA9BC"/><circle cx="25" cy="15" r="5.5" fill="#9AA9BC"/><rect x="10" y="13" width="17" height="8" rx="4" fill="#9AA9BC"/><g stroke="#3B82F6" stroke-width="2.4" stroke-linecap="round"><line x1="13" y1="26" x2="11" y2="32"/><line x1="19" y1="26" x2="17" y2="32"/><line x1="25" y1="26" x2="23" y2="32"/></g></svg>`,
+  snow: `<svg viewBox="0 0 36 36" width="38" height="38"><circle cx="12" cy="15" r="6" fill="#B9C6D6"/><circle cx="19" cy="12" r="7.5" fill="#B9C6D6"/><circle cx="25" cy="15" r="5.5" fill="#B9C6D6"/><rect x="10" y="13" width="17" height="8" rx="4" fill="#B9C6D6"/><g fill="#7DD3FC"><circle cx="13" cy="29" r="2"/><circle cx="19" cy="31" r="2"/><circle cx="25" cy="29" r="2"/></g></svg>`
+};
+
 function renderWeather(){
   const row = document.getElementById('forecastRow');
   row.innerHTML = CONFIG.weather.days.map((f, i) => `
     <div class="forecast-item ${i === 0 ? 'today' : ''}">
       <div class="day">${f.day}</div>
-      <div class="icon">${f.icon}</div>
+      <div class="icon">${WEATHER_ICONS[f.icon] || WEATHER_ICONS.sun}</div>
       <div class="range">${f.high}° <span class="lo">/ ${f.low}°</span></div>
     </div>
   `).join('');
@@ -894,10 +961,10 @@ const TICKER_MIN_DURATION_S = 20;
 
 function renderTicker(items){
   const track = document.getElementById('tickerTrack');
-  const source = items && items.length ? items : CONFIG.ticker;
+  const source = items && items.length ? items : CONFIG.ticker.map(text => ({ time: null, text }));
   const html = source.map(t => `
     <span class="ticker-item">
-      <span class="ticker-time">${t.time}</span>
+      ${t.time ? `<span class="ticker-time">${t.time}</span>` : ''}
       <span class="ticker-text">${t.text}</span>
     </span>
   `).join('');
@@ -915,161 +982,44 @@ function renderTicker(items){
   track.style.animation = `ticker-scroll ${duration}s linear infinite`;
 }
 
-/* ---------------- Live YNET headline feed ---------------- */
-// rss2json normalizes pubDate to UTC as "YYYY-MM-DD HH:MM:SS" with no
-// 'Z'/offset marker, while ynet's own raw XML gives RFC822 dates with an
-// explicit "+0300" offset. Reading either one's numbers directly (or via
-// a JS Date's local getHours()) can understate the time AND ties the
-// result to the viewing device's own system timezone — detect whether an
-// explicit zone is present and, if not, parse it explicitly as UTC.
-function pubDateToMs(pubDate){
-  if (!pubDate) return NaN;
-  const trimmed = pubDate.trim();
-  const hasZone = /[zZ]|[+-]\d\d:?\d\d$/.test(trimmed);
-  const d = new Date(hasZone ? trimmed : trimmed.replace(' ', 'T') + 'Z');
-  return d.getTime();
-}
+/* ---------------- Live YNET headline feed ----------------
+   TWO separate bugs were found and fixed here, on top of each other:
 
-// Given Israel LOCAL wall-clock numbers (not a UTC instant), returns the
-// correct UTC ms for that moment — converging in one correction since
-// the only ambiguity is which DST offset (standard/daylight) applies on
-// that date. Used for walla's feed below, whose pubDate is mislabeled.
-function israelLocalToMs(y, mo, d, h, mi, s){
-  let guess = Date.UTC(y, mo - 1, d, h, mi, s);
-  for (let i = 0; i < 2; i++){
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'Asia/Jerusalem', hour12: false,
-      year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', second: '2-digit'
-    }).formatToParts(new Date(guess));
-    const get = t => parseInt(parts.find(p => p.type === t).value, 10);
-    let hh = get('hour'); if (hh === 24) hh = 0;
-    const shownMs = Date.UTC(get('year'), get('month') - 1, get('day'), hh, get('minute'), get('second'));
-    const targetMs = Date.UTC(y, mo - 1, d, h, mi, s);
-    const diff = targetMs - shownMs;
-    if (diff === 0) break;
-    guess += diff;
-  }
-  return guess;
-}
+   1) WRONG FEED. CONFIG.news.rssUrl was ynet's StoryRss2.xml — that is
+      ynet's GENERAL top-stories feed (in-depth pieces, weather,
+      celebrity news, updated roughly hourly), not the "מבזקים"
+      (flash/breaking-news ticker) feed the board actually wants, which
+      is what's shown at https://www.ynet.co.il/news/category/184 on the
+      site. Verified directly: StoryRss1854.xml's <channel><title> is
+      literally "ynet - מבזקים" (vs StoryRss2.xml's "ynet - חדשות"), and
+      it updates every few minutes with short items instead of hourly
+      with long-form ones — that mismatch is exactly why the ticker
+      looked like it was showing old/unrelated headlines. Fixed by
+      pointing at StoryRss1854.xml instead (also updated in worker.js's
+      fallback path, same reasoning there).
 
-const WALLA_MONTHS = { Jan:1,Feb:2,Mar:3,Apr:4,May:5,Jun:6,Jul:7,Aug:8,Sep:9,Oct:10,Nov:11,Dec:12 };
-// walla's RSS pubDate is full RFC822, WITH the weekday name+comma prefix
-// ("Mon, 14 Sep 2026 11:08:00 GMT") — confirmed against the live feed.
-// The regex here previously required the string to start directly with
-// the day number and had no match for a leading "Mon, ", so it silently
-// failed to match on every real item (returning NaN every time) while
-// only ever having been exercised against hand-written test fixtures
-// that happened to omit the weekday too. That silent failure was the
-// actual root cause behind the ticker issues reported across many
-// rounds: formatHeadlineTimeMs(NaN) falls back to displaying the
-// CURRENT clock time (so the displayed times looked plausible/"fixed"),
-// while item selection kept silently falling through to the
-// single-newest-item fallback instead of ever doing real date-based
-// filtering — the weekday prefix is optional here so this keeps working
-// even if a feed variant omits it.
-const WALLA_PUBDATE_RE = /^(?:\w{3},\s*)?(\d{1,2}) (\w{3}) (\d{4}) (\d{2}):(\d{2}):(\d{2})/;
+   2) NO VISIBLE TIME. The previous simplification (chasing an earlier
+      date-parsing bug — see pubDateToMs's own comment below) dropped
+      per-item timestamps entirely rather than fixing them, matching the
+      user's other, simpler board. But this board's ticker design always
+      had a dedicated time badge per headline, and the user wants it
+      back, showing the REAL publish time from the feed. pubDateToMs
+      already has the fix for the actual root cause from before (GMT-
+      suffixed dates being misdetected as "no zone" and corrupted by a
+      naive string rewrite) — that fix is sound and unrelated to the
+      wrong-feed issue above, so it's restored here rather than
+      re-simplified again.
 
-// The trailing "GMT" is also mislabeled — the numbers underneath are
-// actually Israel local time, not true UTC (checked against the real
-// clock: the literal-GMT reading would put headlines hours in the
-// future). Parse the wall-clock numbers directly and convert them from
-// Israel local time instead of trusting the zone marker.
-function wallaPubDateToMs(pubDate){
-  if (!pubDate) return NaN;
-  const m = pubDate.trim().match(WALLA_PUBDATE_RE);
-  if (!m) return NaN;
-  const mo = WALLA_MONTHS[m[2]];
-  if (!mo) return NaN;
-  return israelLocalToMs(+m[3], mo, +m[1], +m[4], +m[5], +m[6]);
-}
-
-// The rss2json fallback (below) re-formats every feed's pubDate into a
-// plain "YYYY-MM-DD HH:MM:SS" with no zone marker, then labels the whole
-// response as normalized to UTC — but that's just a reformat of walla's
-// original digits, not an actual correction, so it inherits the exact
-// same mislabeling bug as the raw XML (confirmed live: rss2json returned
-// walla pubDate "2026-09-14 04:04:00" for an item that was, at that same
-// moment, freshly published at 04:04 Israel time — not 04:04 UTC/07:04
-// Israel). Same fix as wallaPubDateToMs, just parsing rss2json's format.
-const WALLA_RSS2JSON_PUBDATE_RE = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/;
-function wallaRss2JsonPubDateToMs(pubDate){
-  if (!pubDate) return NaN;
-  const m = pubDate.trim().match(WALLA_RSS2JSON_PUBDATE_RE);
-  if (!m) return NaN;
-  return israelLocalToMs(+m[1], +m[2], +m[3], +m[4], +m[5], +m[6]);
-}
-
-function formatHeadlineTimeMs(ms){
-  const d = new Date(isNaN(ms) ? Date.now() : ms);
-  return new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit', hour12: false
-  }).format(d);
-}
-
-// Each raw item carries whichever it has: a source-specific already-
-// resolved `ms`, or a raw `pubDate` string parsed the generic way.
-function itemMs(item){
-  return (typeof item.ms === 'number' && !isNaN(item.ms)) ? item.ms : pubDateToMs(item.pubDate);
-}
-
-// News feeds mix in short caption-style titles (opinion pieces, the
-// daily cartoon, etc.) that read as meaningless fragments once they're
-// floating alone on a ticker with no article underneath them. A real
-// headline is essentially always longer than this; filter the short
-// ones out before picking items, not after, so the ticker still fills up
-// with maxItems good ones.
-const MIN_HEADLINE_LEN = 25;
-
-// A feed can easily contain 10 items spanning a whole day (a quiet
-// overnight stretch, then a burst once morning news picks up) — taking
-// the first maxItems blindly mixed genuinely-old headlines in alongside
-// fresh ones, and reading order wasn't guaranteed to be newest-first
-// either. So: sort newest-first, then only keep headlines from roughly
-// the last few hours — a headline older than that reading as "current
-// news" on a lobby screen is misleading, even if the feed still lists
-// it.
-const MAX_HEADLINE_AGE_MS = 3 * 60 * 60 * 1000; // 3 hours - the target window
-
-// A real breaking-news feed can genuinely go 1-2 hours between items in
-// a quiet stretch (nothing wrong with the feed, there's just no news) -
-// a strict 3-hour cutoff at that moment leaves only 1-2 headlines, which
-// loops on screen and reads as broken even though it's accurate. If the
-// target window doesn't produce at least MIN_TICKER_ITEMS, relax it in
-// one step to a wider ceiling (still newest-first, still bounded) rather
-// than show a near-empty ticker. If literally nothing qualifies even at
-// the wider ceiling (a very quiet news night), fall back to just the
-// single newest item rather than showing an empty ticker.
-const MIN_TICKER_ITEMS = 4;
-const MAX_HEADLINE_AGE_HARD_CAP_MS = 6 * 60 * 60 * 1000; // 6 hours
-
-function buildTickerItems(rawItems, maxItems){
-  const now = Date.now();
-  const withMs = rawItems
-    .map(item => ({ ms: itemMs(item), text: (item.title || '').trim() }))
-    .filter(i => i.text && i.text.length >= MIN_HEADLINE_LEN)
-    .sort((a, b) => (isNaN(b.ms) ? -Infinity : b.ms) - (isNaN(a.ms) ? -Infinity : a.ms));
-
-  let pool = withMs.filter(i => !isNaN(i.ms) && (now - i.ms) <= MAX_HEADLINE_AGE_MS);
-  if (pool.length < MIN_TICKER_ITEMS){
-    pool = withMs.filter(i => !isNaN(i.ms) && (now - i.ms) <= MAX_HEADLINE_AGE_HARD_CAP_MS);
-  }
-  if (!pool.length && withMs.length) pool = withMs.slice(0, 1);
-
-  return pool.slice(0, maxItems).map(i => ({ time: formatHeadlineTimeMs(i.ms), text: i.text }));
-}
-
-// A single flaky/caching passthrough proxy was leaving the ticker up to a
-// couple of hours stale even after switching away from rss2json's cached
-// JSON conversion — so instead of trusting one source, we race several
-// raw XML passthroughs (no conversion cache in between, each re-reads
-// the feed directly) and check the actual freshness of what each one
-// returns by comparing its newest item's real pubDate against "now". The
-// first source whose newest item is recent enough wins immediately;
-// otherwise we keep whichever attempt (any source's raw passthroughs,
-// then rss2json as a last resort) came back with the freshest data.
-const NEWS_FRESH_ENOUGH_MS = 45 * 60 * 1000; // "recent enough" = under 45 min old
-const NEWS_FETCH_TIMEOUT_MS = 8000;
+   Deliberately kept minimal otherwise: no recency-window filtering, no
+   multi-source racing, no "top up if too few" logic — take the feed
+   exactly as it comes back (already newest-first, being a flash-news
+   feed) and just resolve each item's own real pubDate for display. That
+   simplicity (matching what the user's other board already does) is
+   what avoided the last several rounds of bugs; only the specific
+   things asked for (correct feed, correct per-item time) were added
+   back on top of it, nothing else.
+------------------------------------------------------------- */
+const NEWS_FETCH_TIMEOUT_MS = 10000;
 
 async function fetchWithTimeout(url, ms){
   const ctrl = new AbortController();
@@ -1081,150 +1031,145 @@ async function fetchWithTimeout(url, ms){
   }
 }
 
-function parseRssXml(xmlText, parseDate){
-  const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
-  if (doc.querySelector('parsererror')) return null;
-  const rawItems = Array.from(doc.querySelectorAll('item')).map(el => {
-    const pubDate = el.querySelector('pubDate') ? el.querySelector('pubDate').textContent : '';
-    return {
-      title: el.querySelector('title') ? el.querySelector('title').textContent : '',
-      ms: parseDate(pubDate)
-    };
-  });
-  return rawItems.length ? rawItems : null;
-}
-
-function newestItemAgeMs(rawItems){
-  let newest = 0;
-  rawItems.forEach(i => {
-    const t = itemMs(i);
-    if (!isNaN(t) && t > newest) newest = t;
-  });
-  return newest ? (Date.now() - newest) : Infinity;
-}
-
 // ynet's server ignores unknown query params and still returns its
-// normal live feed — so appending a changing one directly onto the
-// SOURCE url (not just onto the proxy wrapper's own params) changes what
-// the proxy is actually asked to fetch each time. This matters most for
-// rss2json: its server-side cache is keyed by the rss_url it was given,
-// so a static rss_url can keep serving the same cached (stale) pull no
-// matter how the wrapper request itself is cache-busted. A moving
-// source URL forces a genuinely fresh pull instead.
+// normal live feed, so appending a changing one directly onto the
+// SOURCE url (not just onto the rss2json wrapper's own params) is meant
+// to force a fresh pull each time. In practice this turned out NOT to
+// be enough on its own (see the freshness check below) — rss2json is a
+// free public proxy with server-side caching behavior we don't control
+// and can't fully predict from the query string alone.
 function bustUrl(url){
   return `${url}${url.includes('?') ? '&' : '?'}_cb=${Date.now()}`;
 }
 
-// Try one feed source (walla, then ynet as a fallback source — not just
-// a fallback proxy) through several raw-XML passthroughs. Returns
-// { rawItems, age } for the best (freshest) attempt on this source, or
-// null if every passthrough failed outright.
-async function fetchSourceViaRawProxies(rssUrl, parseDate){
-  const busted = bustUrl(rssUrl);
-  const proxyUrls = [
-    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(busted)}`,
-    `https://corsproxy.io/?url=${encodeURIComponent(busted)}`,
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(busted)}`
-  ];
-  let best = null;
-  for (const url of proxyUrls){
-    try{
-      const res = await fetchWithTimeout(url, NEWS_FETCH_TIMEOUT_MS);
-      if (!res.ok) throw new Error('bad response ' + res.status);
-      const rawItems = parseRssXml(await res.text(), parseDate);
-      if (!rawItems) throw new Error('xml parse/empty');
-      const age = newestItemAgeMs(rawItems);
-      if (!best || age < best.age) best = { rawItems, age };
-      if (age <= NEWS_FRESH_ENOUGH_MS) return best;
-    }catch(err){
-      console.warn('raw proxy failed for ' + rssUrl + ' via ' + url.split('?')[0] + ':', err);
-    }
-  }
-  return best;
+// rss2json normalizes pubDate to a bare UTC "YYYY-MM-DD HH:MM:SS" (no
+// zone marker), while ynet's own raw XML gives RFC822 dates — USUALLY
+// with an explicit "+0300" offset, but real-world feeds are inconsistent
+// and some items instead end in a named zone abbreviation like "GMT"
+// (standard RFC822/RFC1123 also allows that form; native Date parsing
+// handles it correctly on its own). Detect whichever form is present —
+// numeric offset, "Z", or a named abbreviation — and only apply the
+// manual UTC-forcing rewrite to the one shape that's actually safe for
+// it (a bare zone-less "YYYY-MM-DD HH:MM:SS" timestamp); anything else
+// goes straight to the native parser as-is, so an unrecognized shape
+// degrades to normal (if imprecise) parsing instead of ever being
+// corrupted into NaN — which used to make every headline fall back to
+// displaying "right now" (see formatHeadlineTimeMs below) regardless of
+// its real time.
+function pubDateToMs(pubDate){
+  if (!pubDate) return NaN;
+  const trimmed = pubDate.trim();
+  const hasZone = /[zZ]|GMT|UTC|[+-]\d\d:?\d\d$/.test(trimmed);
+  if (hasZone) return new Date(trimmed).getTime();
+  const isNaiveTimestamp = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}/.test(trimmed);
+  const d = new Date(isNaiveTimestamp ? trimmed.replace(' ', 'T') + 'Z' : trimmed);
+  return d.getTime();
 }
 
-// Preferred path: the same Cloudflare Worker already deployed for
-// notices/heartbeat also proxies walla's RSS feed server-side (see
-// worker.js's /api/news) — with none of the unpredictable caching the
-// free third-party CORS-proxy passthroughs below turned out to have
-// (that caching, not the timezone math, was the actual cause of the
-// ticker still showing hours-old headlines even after the timestamp fix).
-// Tried first; if the Worker isn't reachable (URL not filled in yet, or
-// a hiccup) this just fails silently and the older proxy-racing logic
-// below still runs exactly as before, so nothing regresses.
-function newsProxyUrl(){
-  return CONFIG.noticesApiUrl.replace(/\/api\/notices\/?$/, '/api/news');
+function formatHeadlineTimeMs(ms){
+  if (isNaN(ms)) return null; // unresolved date -> show no time badge, rather than a misleading "now"
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit', hour12: false
+  }).format(new Date(ms));
 }
-async function fetchViaOwnWorker(parseDate){
-  try{
-    const res = await fetchWithTimeout(`${newsProxyUrl()}?_=${Date.now()}`, NEWS_FETCH_TIMEOUT_MS);
-    if (!res.ok) throw new Error('bad response ' + res.status);
-    const rawItems = parseRssXml(await res.text(), parseDate);
-    if (!rawItems) throw new Error('xml parse/empty');
-    return { rawItems, age: newestItemAgeMs(rawItems) };
-  }catch(err){
-    console.warn('own-worker news proxy unavailable, falling back to public proxies:', err);
-    return null;
-  }
+
+function extractItemsFromRssXml(xmlText){
+  const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
+  if (doc.querySelector('parsererror')) return null;
+  const items = Array.from(doc.querySelectorAll('item')).map(el => {
+    const title = el.querySelector('title') ? el.querySelector('title').textContent.trim() : '';
+    const pubDate = el.querySelector('pubDate') ? el.querySelector('pubDate').textContent : '';
+    const ms = pubDateToMs(pubDate);
+    return { text: title, ms, time: formatHeadlineTimeMs(ms) };
+  }).filter(i => i.text);
+  return items.length ? items : null;
+}
+
+function newestItemAgeMs(items){
+  let newest = -Infinity;
+  for (const it of items){ if (!isNaN(it.ms) && it.ms > newest) newest = it.ms; }
+  return newest === -Infinity ? Infinity : (Date.now() - newest);
+}
+
+// This is the threshold that actually matters: the מבזקים feed updates
+// every few minutes around the clock, so if the newest item we got back
+// is older than this, the response is almost certainly a stale CACHED
+// copy, not genuinely the live feed — the proxy (or, in principle, ynet
+// itself) served us something old instead of erroring outright, which
+// is exactly the failure mode a plain try/catch can't detect on its own
+// (the request "succeeds", it's just succeeding with old data). Live
+// symptom that led to this: the ticker's first headline showed a
+// pubDate several HOURS behind the real clock, with no fetch error at
+// all — rss2json's response looked completely normal, it just wasn't
+// fresh.
+const NEWS_STALE_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
+
+// Preferred path — the same Cloudflare Worker already deployed for
+// notices/heartbeat also proxies ynet's raw RSS server-side, explicitly
+// WITH caching turned off end-to-end (see worker.js's /api/news:
+// `cf: { cacheTtl: 0, cacheEverything: false }`, and a fresh Worker
+// request has no caching layer of its own in between at all) — unlike
+// rss2json below, there's no "is this actually live or just a cached
+// copy?" question to resolve here, so if the Worker is reachable its
+// result is trusted immediately.
+async function fetchItemsViaOwnWorker(){
+  const base = CONFIG.noticesApiUrl.replace(/\/api\/notices\/?$/, '/api/news');
+  const url = `${base}?source=ynet&_=${Date.now()}`;
+  const res = await fetchWithTimeout(url, NEWS_FETCH_TIMEOUT_MS);
+  if (!res.ok) throw new Error('bad response ' + res.status);
+  const items = extractItemsFromRssXml(await res.text());
+  if (!items) throw new Error('xml parse/empty');
+  return items;
+}
+
+// Fallback path — a free public RSS-to-JSON proxy, no server of our own
+// required. Simple and normally fine, but it can silently serve a
+// cached (stale) copy of the feed instead of erroring — see
+// NEWS_STALE_THRESHOLD_MS above — so this is only fully trusted when
+// its own freshest item looks genuinely live; otherwise it's kept only
+// as a last-resort "better than nothing" answer.
+async function fetchItemsViaRss2Json(){
+  const url = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(bustUrl(CONFIG.news.rssUrl))}&t=${Date.now()}`;
+  const res = await fetchWithTimeout(url, NEWS_FETCH_TIMEOUT_MS);
+  if (!res.ok) throw new Error('bad response ' + res.status);
+  const data = await res.json();
+  if (data.status !== 'ok' || !data.items || !data.items.length) throw new Error('no items');
+  const items = data.items
+    .map(i => { const ms = pubDateToMs(i.pubDate); return { text: (i.title || '').trim(), ms, time: formatHeadlineTimeMs(ms) }; })
+    .filter(i => i.text);
+  if (!items.length) throw new Error('no titles');
+  return items;
 }
 
 async function fetchNewsTicker(){
-  const { sources, proxyUrl, maxItems } = CONFIG.news;
-  let best = null; // { rawItems, age }
+  const attempts = [fetchItemsViaOwnWorker, fetchItemsViaRss2Json];
+  let bestStale = null; // best (freshest) result seen so far, even if not fresh enough to fully trust
 
-  // The Worker pulls straight from Walla with no caching layer in
-  // between (see worker.js's /api/news), so whatever it returns already
-  // IS the live feed — unlike the free public CORS proxies below, there
-  // is no "is this actually fresh or just a cached copy?" question to
-  // resolve here. The old code only trusted this result when its newest
-  // headline was under NEWS_FRESH_ENOUGH_MS old, and otherwise fell
-  // through into the slow multi-proxy chain (up to 3 proxies x 2 sources
-  // x 8s timeout, then an rss2json fallback) EVERY round the news was
-  // simply quiet for 45+ minutes — which is often, and is exactly what
-  // made the ticker take 2-3 minutes to update. Use it immediately on
-  // success; only fall through to the proxy chain if the Worker itself
-  // is unreachable.
-  const ownWorkerResult = await fetchViaOwnWorker(sources[0].parseDate);
-  if (ownWorkerResult){
-    const items = buildTickerItems(ownWorkerResult.rawItems, maxItems);
-    if (items.length){ renderTicker(items); return; }
-    best = ownWorkerResult;
-  }
-
-  for (const source of sources){
-    const result = await fetchSourceViaRawProxies(source.rssUrl, source.parseDate);
-    if (result && (!best || result.age < best.age)) best = result;
-    if (best && best.age <= NEWS_FRESH_ENOUGH_MS){
-      const items = buildTickerItems(best.rawItems, maxItems);
-      if (items.length){ renderTicker(items); return; }
+  for (const attempt of attempts){
+    try{
+      const items = await attempt();
+      if (!items || !items.length) continue;
+      const age = newestItemAgeMs(items);
+      if (age <= NEWS_STALE_THRESHOLD_MS){
+        renderTicker(items.slice(0, CONFIG.news.maxItems));
+        return;
+      }
+      console.warn('news source (' + attempt.name + ') answered but looks stale (newest item ~' + Math.round(age / 60000) + ' min old) — trying next source before accepting it');
+      if (!bestStale || age < bestStale.age) bestStale = { items, age };
+    }catch(err){
+      console.warn('news fetch attempt failed (' + attempt.name + '), trying next source:', err);
     }
   }
 
-  // Last resort: rss2json's JSON conversion of the primary feed. It can
-  // carry its own server-side cache (which is what made the ticker look
-  // stale in the first place), so it's only used when none of the raw
-  // passthroughs above produced fresh-enough data from any source.
-  try{
-    const primary = sources[0];
-    const busted = bustUrl(primary.rssUrl);
-    const res = await fetchWithTimeout(`${proxyUrl}${encodeURIComponent(busted)}&t=${Date.now()}`, NEWS_FETCH_TIMEOUT_MS);
-    if (!res.ok) throw new Error('bad response');
-    const data = await res.json();
-    if (!data.items || !data.items.length) throw new Error('no items');
-    const parseFn = primary.parseRss2Json || pubDateToMs;
-    const rawItems = data.items.map(i => ({ title: i.title, ms: parseFn(i.pubDate) }));
-    const age = newestItemAgeMs(rawItems);
-    if (!best || age < best.age) best = { rawItems, age };
-  }catch(err){
-    console.warn('rss2json fallback failed:', err);
-  }
-
-  if (best){
-    const items = buildTickerItems(best.rawItems, maxItems);
-    if (items.length){ renderTicker(items); return; }
+  // Nothing came back fresh enough from any source — better to show the
+  // freshest stale answer we did get than an empty/frozen ticker.
+  if (bestStale){
+    renderTicker(bestStale.items.slice(0, CONFIG.news.maxItems));
+    return;
   }
   console.warn('News feed unavailable from every source this round; keeping last known ticker.');
 }
+
 
 /* ---------------- Center: rotating house-rule posters ---------------- */
 let currentSlide = 0;
@@ -1239,9 +1184,10 @@ function renderSlideshow(){
         </div>
       `;
     }
+    const bgStyle = a.image ? ` style="background-image:url('${a.image}')"` : '';
     return `
-      <div class="slide ${i === 0 ? 'active' : ''}" style="background-image:url('${a.image}')" data-index="${i}">
-        <div class="scrim"></div>
+      <div class="slide ${a.image ? '' : 'no-photo'} ${i === 0 ? 'active' : ''}"${bgStyle} data-index="${i}">
+        ${a.image ? '<div class="scrim"></div>' : ''}
         <div class="badge-icon">${a.icon}</div>
         <div class="caption">
           <h2>${a.title}</h2>
@@ -1298,7 +1244,7 @@ function updateClock(){
 function fetchLiveInfo(){
   const { lat, lon, geonameid } = CONFIG.location;
   const daysHeb = ['א','ב','ג','ד','ה','ו','ש'];
-  const iconFor = code => code < 3 ? '☀️' : (code < 50 ? '⛅' : (code < 70 ? '🌧️' : '🌨️'));
+  const iconFor = code => code < 3 ? 'sun' : (code < 50 ? 'partly-cloudy' : (code < 70 ? 'rain' : 'snow'));
 
   // Weather — 4 tiles, starting today
   fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,temperature_2m_min,weathercode&timezone=auto&forecast_days=4&_=${Date.now()}`)
@@ -1426,6 +1372,40 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
+// See the hidden <video id="keepAwakeVideo"> above — belt-and-suspenders
+// alongside the Wake Lock API for TV browsers that don't implement Wake
+// Lock at all. autoplay+muted should start it on its own in effectively
+// every browser (muted autoplay is broadly allowed), but some TV
+// browsers need an explicit .play() call too — and if it ever stalls
+// (some embedded browsers pause background video unpredictably),
+// re-kick it periodically rather than trusting `loop` alone.
+function keepAwakeVideoTick(){
+  const v = document.getElementById('keepAwakeVideo');
+  if (!v) return;
+  if (v.paused){
+    v.play().catch(err => console.warn('keep-awake video play() failed (harmless if Wake Lock above is active):', err));
+  }
+}
+
+// Cheap/embedded TV browsers (this is common on budget Android boxes
+// especially) can accumulate memory over days of continuous, never-
+// closed use until the picture freezes or the box needs a power cycle
+// to recover — a known symptom of long-running kiosk displays in
+// general, not something specific to this board's code. A full page
+// reload clears all of that accumulated state in one shot and costs
+// nothing a lobby screen's viewers would ever notice (nobody is mid-
+// interaction with it), so schedule one at a fixed, low-traffic hour
+// every day instead of waiting for it to become a problem that needs a
+// physical unplug-replug to fix.
+const DAILY_RELOAD_HOUR = 4; // 04:00 local (the device's own clock)
+function scheduleDailyReload(){
+  const now = new Date();
+  const next = new Date(now);
+  next.setHours(DAILY_RELOAD_HOUR, 0, 0, 0);
+  if (next <= now) next.setDate(next.getDate() + 1);
+  setTimeout(() => location.reload(), next.getTime() - now.getTime());
+}
+
 /* =========================================================================
    ============================  INIT  ============================
 ========================================================================= */
@@ -1446,6 +1426,10 @@ function init(){
   window.addEventListener('resize', fitStage);
 
   requestWakeLock();
+  keepAwakeVideoTick();
+  setInterval(keepAwakeVideoTick, 60 * 1000);
+
+  scheduleDailyReload();
 
   fetchNewsTicker();
   setInterval(fetchNewsTicker, CONFIG.news.refreshMs);
