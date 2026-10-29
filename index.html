@@ -93,7 +93,7 @@
      badge float above it in their own corners (z-index 2). */
   .welcome-banner{
     position:absolute;
-    inset:0;
+    top:0; right:0; bottom:0; left:0;
     display:flex;
     align-items:center;
     justify-content:center;
@@ -196,7 +196,51 @@
     min-height:0;
   }
 
-  .col{ display:flex; flex-direction:column; gap:10px; min-height:0; overflow-y:auto; overflow-x:hidden; }
+  /* height:100% is added alongside flex:1/min-height:0 everywhere in this
+     nested flex/grid chain (#stage -> main.body-grid -> .col -> .card ->
+     .slideshow -> .slide) as a defensive fallback. #stage itself has a
+     fixed, definite pixel height (1920x1080 - see "FIXED 1920x1080 STAGE"
+     above), so a plain height:100% cascades through every descendant
+     exactly the same as a correctly-resolved flex:1 chain would -- it's
+     redundant and harmless on an engine that already gets flex:1 +
+     min-height:0 right, but it rescues an engine that doesn't propagate
+     stretch sizing correctly through several levels of nested flex
+     columns sitting inside a CSS Grid row (a known weak spot in older
+     rendering engines; modern desktop Chrome has always handled it,
+     which is why this only showed up on an actual Android TV box and
+     not when testing in a normal Chrome window). This was exactly the
+     shape of a reported bug: the center "rotating poster" card's photo
+     only filled the top portion of the card, leaving a blank gap below
+     it -- i.e. .slideshow (and therefore its position:absolute .slide
+     children) wasn't actually stretching to the card's full height on
+     that device.
+
+     IMPORTANT FOLLOW-UP: the height:100% fix above was necessary but not
+     sufficient -- after shipping it, the real device still showed the
+     photo filling only its own top portion with a blank gap below, AND
+     this was confirmed to happen identically in two different kiosk
+     browser apps (TV Bro and Fully Kiosk Browser) on the same box. Two
+     separate apps hitting the exact same bug points at the one thing
+     they share: the device's underlying Android System WebView component
+     (both apps render web content through it, or through an equally
+     outdated bundled Chromium build) -- not a bug in either app
+     specifically. The remaining cause was that every .slide (and the
+     header's .welcome-banner) was positioned with the CSS "inset:0"
+     SHORTHAND instead of spelling out top:0;right:0;bottom:0;left:0.
+     "inset" is a comparatively recent CSS property (only broadly
+     supported from ~2021 on); on an old WebView like this box's, an
+     unrecognized shorthand is simply dropped, so the element kept
+     position:absolute but with NO offsets set at all -- instead of
+     stretching to fill its positioned ancestor, it shrank to the size of
+     its own content (the caption text), and its background-image (sized
+     by background-size:cover relative to THAT small box) only ever
+     covered that small area. Spelling out all four physical offsets
+     explicitly is the long-supported, universally-compatible equivalent,
+     works identically in every kiosk browser app on this box (since the
+     fix is at the HTML/CSS level, not app-specific), and has been used
+     everywhere "inset:0" previously appeared in this
+     file. */
+  .col{ display:flex; flex-direction:column; gap:10px; min-height:0; height:100%; overflow-y:auto; overflow-x:hidden; }
 
   .card{
     background:var(--cream);
@@ -322,6 +366,7 @@
   /* ---------- CENTER: rotating house-rule posters ---------- */
   .featured-card{
     flex:1;
+    height:100%;
     position:relative;
     padding:0;
     overflow:hidden;
@@ -330,9 +375,9 @@
     min-height:0;
     border:1px solid var(--hairline);
   }
-  .slideshow{ position:relative; flex:1; min-height:0; }
+  .slideshow{ position:relative; flex:1; min-height:0; height:100%; }
   .slide{
-    position:absolute; inset:0; opacity:0; transition:opacity 1.3s ease-in-out;
+    position:absolute; top:0; right:0; bottom:0; left:0; opacity:0; transition:opacity 1.3s ease-in-out;
     background-size:cover;
     background-position:center;
     background-color:var(--navy-panel-2);
@@ -356,7 +401,7 @@
   .slide .scrim{
     /* dark gradient over the photo so the caption stays legible,
        plus a faint gold wash to tie the photo into the palette */
-    position:absolute; inset:0;
+    position:absolute; top:0; right:0; bottom:0; left:0;
     background:
       linear-gradient(0deg, rgba(6,14,28,0.95) 0%, rgba(6,14,28,0.55) 42%, rgba(6,14,28,0.05) 75%),
       linear-gradient(180deg, rgba(205,168,94,0.12), transparent 30%);
@@ -1221,16 +1266,30 @@ function startSlideshow(){
 }
 
 /* ---------------- Live Clock & Date (DD/MM/YYYY) ---------------- */
+// Forced to the Asia/Jerusalem timezone explicitly, the same way the news
+// ticker's timestamps and the Shabbat times are elsewhere in this file --
+// NOT read from the device's own local getHours()/getDate() etc. (what
+// this used to do). Cheap Android streamer boxes very commonly ship with
+// their system timezone left on UTC or some other default rather than
+// Israel, and unlike a stale headline, a clock that's simply wrong by a
+// fixed number of hours is an easy thing to not notice is even broken --
+// reported live as a board showing "9:23" partway through the morning.
+// Forcing the timezone here makes the on-screen clock correct regardless
+// of whether the box's own system timezone was ever set up right. (Fixing
+// that system setting is still worth doing on the device too -- other
+// things on the box may care about it -- but the board itself no longer
+// depends on it.)
 function updateClock(){
-  const now = new Date();
-  const hh = String(now.getHours()).padStart(2, '0');
-  const mm = String(now.getMinutes()).padStart(2, '0');
-  document.getElementById('clockTime').textContent = `${hh}:${mm}`;
-
-  const dd = String(now.getDate()).padStart(2, '0');
-  const mo = String(now.getMonth() + 1).padStart(2, '0');
-  const yyyy = now.getFullYear();
-  document.getElementById('gregorianDate').textContent = `${dd}/${mo}/${yyyy}`;
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Jerusalem', hour12: false,
+    hour: '2-digit', minute: '2-digit',
+    day: '2-digit', month: '2-digit', year: 'numeric'
+  }).formatToParts(new Date());
+  const get = type => parts.find(p => p.type === type).value;
+  let hh = get('hour');
+  if (hh === '24') hh = '00'; // some engines format midnight as "24" under hour12:false
+  document.getElementById('clockTime').textContent = `${hh}:${get('minute')}`;
+  document.getElementById('gregorianDate').textContent = `${get('day')}/${get('month')}/${get('year')}`;
 }
 
 /* ---------------- Live weather + Shabbat (Open-Meteo + Hebcal) ----------------
@@ -1241,7 +1300,36 @@ function updateClock(){
    page is running inside a sandboxed preview that blocks outbound
    network calls, etc.) that section just keeps showing its fallback
    values instead of breaking. */
+// Weather and Shabbat/parasha only need refreshing every 30 minutes
+// under normal conditions (unlike the news ticker/notices, which change
+// every few minutes) -- no point hammering Open-Meteo/Hebcal more often
+// than that. BUT that same 30-minute gap becomes a problem the one time
+// it actually matters: if the very first attempt (right after the page
+// loads, e.g. right after a boot where the internet isn't up yet)
+// fails, waiting a full 30 minutes for the next scheduled attempt means
+// the Shabbat card/weather can be left showing "טוען…"/stale data for
+// half an hour after connectivity is already back -- noticeably longer
+// than everything else on the board, which recovers within a few
+// minutes. liveInfoRetryTimer is a SHORT one-off retry scheduled only
+// on failure, on top of (not instead of) the normal 30-minute cycle, so
+// a lost first attempt is retried in 2 minutes instead of up to 30.
+let liveInfoRetryTimer = null;
+function scheduleLiveInfoRetry(){
+  // Weather and Shabbat can each fail independently in the same call;
+  // coalesce so a double failure doesn't schedule two overlapping retries.
+  if (liveInfoRetryTimer) return;
+  liveInfoRetryTimer = setTimeout(() => {
+    liveInfoRetryTimer = null;
+    fetchLiveInfo();
+  }, 2 * 60 * 1000);
+}
+
 function fetchLiveInfo(){
+  // A fresh call (from the normal 30-minute interval, or a retry) makes
+  // any still-pending short retry redundant -- cancel it so we don't
+  // end up firing an extra, unnecessary fetch shortly after this one.
+  if (liveInfoRetryTimer){ clearTimeout(liveInfoRetryTimer); liveInfoRetryTimer = null; }
+
   const { lat, lon, geonameid } = CONFIG.location;
   const daysHeb = ['א','ב','ג','ד','ה','ו','ש'];
   const iconFor = code => code < 3 ? 'sun' : (code < 50 ? 'partly-cloudy' : (code < 70 ? 'rain' : 'snow'));
@@ -1259,7 +1347,10 @@ function fetchLiveInfo(){
       }));
       renderWeather();
     })
-    .catch(err => console.warn('Weather feed unavailable, showing fallback:', err));
+    .catch(err => {
+      console.warn('Weather feed unavailable, showing fallback:', err);
+      scheduleLiveInfoRetry();
+    });
 
   // Shabbat times + weekly parasha. Candle-lighting is always THIS
   // upcoming Friday's own entry. The parasha is the NEAREST one coming
@@ -1313,7 +1404,10 @@ function fetchLiveInfo(){
               renderShabbat();
             }
           })
-          .catch(err => console.warn('Zmanim havdalah fetch unavailable, showing fallback:', err));
+          .catch(err => {
+            console.warn('Zmanim havdalah fetch unavailable, showing fallback:', err);
+            scheduleLiveInfoRetry();
+          });
       }
     })
     .catch(err => {
@@ -1324,6 +1418,7 @@ function fetchLiveInfo(){
         CONFIG.shabbat.parasha = 'לא זמין כרגע';
         renderShabbat();
       }
+      scheduleLiveInfoRetry();
     });
 }
 
@@ -1403,7 +1498,43 @@ function scheduleDailyReload(){
   const next = new Date(now);
   next.setHours(DAILY_RELOAD_HOUR, 0, 0, 0);
   if (next <= now) next.setDate(next.getDate() + 1);
-  setTimeout(() => location.reload(), next.getTime() - now.getTime());
+  setTimeout(() => attemptDailyReload(60), next.getTime() - now.getTime());
+}
+// Reloading is a REAL page navigation (unlike this board's regular data
+// fetches elsewhere in this file, which fail silently on a network
+// hiccup and just keep showing the last-known data) -- if the device
+// happens to be offline at the exact moment this fires, a plain
+// location.reload() would hand control over to the BROWSER'S OWN native
+// "no internet connection" error page, replacing the board entirely
+// until someone notices and reloads it by hand. Fully Kiosk Browser has
+// a built-in "reload automatically on error" setting that would recover
+// from that on its own, but TV Bro does not -- so on a TV Bro install in
+// particular, this was a real way for the one-in-however-many-days
+// unlucky reload to turn a brief internet blip into a board that stays
+// down indefinitely. That's exactly the opposite of what this daily
+// reload exists to do. Fix: before navigating, confirm the page's own
+// server is actually reachable with a quick same-origin HEAD request
+// (not just navigator.onLine, which only reflects local Wi-Fi/Ethernet
+// link state and can still read "online" even when the router itself
+// has no upstream internet). If it isn't reachable, wait 2 minutes and
+// try again (up to ~2 hours) instead of reloading into a dead page; if
+// it's still down after that, skip today's reload entirely and let
+// tomorrow's scheduled attempt try again. The board just keeps running
+// on whatever it already has loaded in memory in the meantime -- always
+// better than a bare browser error page with no board at all.
+function attemptDailyReload(retriesLeft){
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
+  fetch(location.href, { method:'HEAD', cache:'no-store', signal: controller.signal })
+    .then(() => { clearTimeout(timer); location.reload(); })
+    .catch(() => {
+      clearTimeout(timer);
+      if (retriesLeft > 0){
+        setTimeout(() => attemptDailyReload(retriesLeft - 1), 2 * 60 * 1000);
+      } else {
+        scheduleDailyReload(); // give up for today; tomorrow's 04:00 attempt will try again
+      }
+    });
 }
 
 /* =========================================================================
@@ -1458,6 +1589,42 @@ function init(){
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+/* ---------------- Offline-safe cold start (Service Worker) ----------------
+   Everything above this point only helps once the page is ALREADY loaded
+   and running -- it has no power over what happens the moment a browser
+   (TV Bro, after the box boots) tries to load this URL from scratch while
+   there's no internet yet. That's a real scenario: after a power outage,
+   the box/streamer often finishes booting faster than the home router/ISP
+   modem finishes reconnecting (that can take 1-3 minutes) -- so TV Bro can
+   try to open this page before the network is actually back. TV Bro has no
+   setting to retry that automatically (unlike Fully Kiosk's "reload on
+   error"), so without help here the browser would show its own blank
+   native "no internet connection" page instead of the board, and nothing
+   on THIS page's JS can rescue that, because none of it ever got the
+   chance to run.
+
+   The fix is a Service Worker (sw.js, alongside this file): once this page
+   has loaded successfully even a single time, the Service Worker keeps a
+   cached copy of it. On every future load it still always tries the real
+   network FIRST (so the board is never stuck on stale content while
+   there's internet) -- it only falls back to that cached copy on the rare
+   occasion the network request itself fails, i.e. exactly a cold boot
+   during an outage. That swaps "blank browser error page, stuck until
+   someone notices" for "today's/yesterday's board, running normally,
+   until the connection comes back on its own" -- and once it's back, the
+   page's own existing logic (data fetches keep last-known values; the
+   04:00 reload above already waits for reachability) takes over exactly
+   as it already does. Registration failing silently (older WebView, first
+   run ever with nothing cached yet, sw.js not uploaded to the server) is
+   harmless either way -- it just means this specific safety net isn't
+   available, not that anything breaks. */
+if ('serviceWorker' in navigator){
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .catch(err => console.warn('Service Worker registration failed (harmless -- just means no offline-cold-boot fallback is available):', err));
+  });
+}
 </script>
 
 </body>
