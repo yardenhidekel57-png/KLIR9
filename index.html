@@ -1527,20 +1527,19 @@ function showKeepAwakeDebugBadge(wakeLockActive){
 // See the hidden <video id="keepAwakeVideo"> above — this used to run
 // UNCONDITIONALLY alongside the Wake Lock API as pure belt-and-
 // suspenders, on the assumption that a muted, 1x1px, looping video
-// costs effectively nothing. That assumption is now specifically being
-// tested: continuous hardware video decoding for hours on end is one of
-// the more demanding things a weak embedded WebView can be asked to do,
-// and it's plausible some SoCs/driver combos leak native decoder/GPU
-// resources over long unattended runs in a way a page-level
-// location.reload() (see scheduleDailyReload) would NOT fully clear,
-// since that reload doesn't necessarily tear down and recreate the
-// WebView's own native renderer process. So this fallback now only
-// starts AT ALL if requestWakeLock() reports failure/unsupported (see
-// init()) -- on a device where the Wake Lock API works, the video
-// element above simply never plays, at zero ongoing cost. If it ever
-// stalls (some embedded browsers pause background video
-// unpredictably), re-kick it periodically rather than trusting `loop`
-// alone.
+// costs effectively nothing. That was tightened to only start when
+// requestWakeLock() reports failure/unsupported, while investigating
+// whether continuous hardware video decoding on weak SoCs was behind the
+// multi-hour crash. UPDATE: a direct comparison against two other boards
+// on the same TV Bro/streamer hardware that are confirmed to survive a
+// full week found BOTH of them run this exact pattern (Wake Lock request
+// AND an unconditional autoplay video loop, simultaneously, all the
+// time) with no crash -- so the video loop itself is now a weak suspect.
+// The gating stays (it's strictly cheaper, never more, than running
+// unconditionally) but the real fix that mattered was the reload cadence
+// -- see scheduleReload() and checkMemoryWatchdog() below. If it ever
+// stalls (some embedded browsers pause background video unpredictably),
+// re-kick it periodically rather than trusting `loop` alone.
 function keepAwakeVideoTick(){
   const v = document.getElementById('keepAwakeVideo');
   if (!v) return;
@@ -1556,31 +1555,23 @@ function keepAwakeVideoTick(){
 // general, not something specific to this board's code. A full page
 // reload clears all of that accumulated state in one shot and costs
 // nothing a lobby screen's viewers would ever notice (nobody is mid-
-// interaction with it), so schedule one at a fixed, low-traffic hour
-// every day instead of waiting for it to become a problem that needs a
-// physical unplug-replug to fix.
+// interaction with it).
 //
-// A controlled real-world test (one streamer box, isolated, no other
-// variables) showed the board starting to destabilize after as little
-// as ~18 hours of continuous uptime on weak hardware -- comfortably
-// LESS than the 24-hour gap a single once-a-day reload leaves open in
-// the worst case (if instability starts at hour 18 but the next reload
-// isn't until hour 24, there's a window where it's already struggling).
-// Two reload times, roughly 12 hours apart, keep the longest possible
-// gap safely under that observed threshold. 16:00 (afternoon) is still
-// a low-traffic hour for a residential lobby board, same reasoning as
-// the original 04:00 slot.
-const DAILY_RELOAD_HOURS = [4, 16]; // 04:00 and 16:00 local (the device's own clock)
-function scheduleDailyReload(){
-  const now = new Date();
-  let next = null;
-  for (const hour of DAILY_RELOAD_HOURS){
-    const candidate = new Date(now);
-    candidate.setHours(hour, 0, 0, 0);
-    if (candidate <= now) candidate.setDate(candidate.getDate() + 1);
-    if (!next || candidate < next) next = candidate;
-  }
-  setTimeout(() => attemptDailyReload(60), next.getTime() - now.getTime());
+// Cadence: this used to be a fixed 2x/day schedule (04:00 + 16:00, a
+// ~12h worst-case gap), chosen to stay under an ~18h instability point
+// seen in one controlled test. A real-device run WITH that 2x/day
+// schedule already in place still crashed at ~21h, so a 12h gap is not
+// short enough. A direct side-by-side comparison against two other
+// boards on the SAME TV Bro/streamer hardware that are confirmed to run
+// a full WEEK with no crash found the one structural difference that
+// matters: both of them reload on a simple rolling ~1-HOUR timer, not
+// once or twice a day at fixed clock times. Matching that proven cadence
+// here instead of a longer guessed interval -- a brief, sub-second
+// reload flash once an hour is a trade worth making against a board that
+// goes dark for hours until someone notices and power-cycles it.
+const RELOAD_INTERVAL_MS = 60 * 60 * 1000; // 1 hour, matching the two boards confirmed stable for a week
+function scheduleReload(){
+  setTimeout(() => attemptReload(60), RELOAD_INTERVAL_MS);
 }
 // Reloading is a REAL page navigation (unlike this board's regular data
 // fetches elsewhere in this file, which fail silently on a network
@@ -1600,11 +1591,12 @@ function scheduleDailyReload(){
 // link state and can still read "online" even when the router itself
 // has no upstream internet). If it isn't reachable, wait 2 minutes and
 // try again (up to ~2 hours) instead of reloading into a dead page; if
-// it's still down after that, skip today's reload entirely and let
-// tomorrow's scheduled attempt try again. The board just keeps running
-// on whatever it already has loaded in memory in the meantime -- always
+// it's still down after that, skip this reload entirely and let the
+// next scheduled attempt (an hour later, or sooner if the memory
+// watchdog below fires) try again. The board just keeps running on
+// whatever it already has loaded in memory in the meantime -- always
 // better than a bare browser error page with no board at all.
-function attemptDailyReload(retriesLeft){
+function attemptReload(retriesLeft){
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 5000);
   fetch(location.href, { method:'HEAD', cache:'no-store', signal: controller.signal })
@@ -1612,11 +1604,29 @@ function attemptDailyReload(retriesLeft){
     .catch(() => {
       clearTimeout(timer);
       if (retriesLeft > 0){
-        setTimeout(() => attemptDailyReload(retriesLeft - 1), 2 * 60 * 1000);
+        setTimeout(() => attemptReload(retriesLeft - 1), 2 * 60 * 1000);
       } else {
-        scheduleDailyReload(); // give up for this slot; the next scheduled reload time will try again
+        scheduleReload(); // give up for this slot; the next scheduled reload will try again
       }
     });
+}
+
+// JS heap memory watchdog, also taken directly from the two boards
+// confirmed to survive a full week on the same hardware: neither relies
+// solely on a timed reload to stay healthy -- both also watch the page's
+// own JS heap (performance.memory; Chromium-only, which is exactly what
+// TV Bro's WebView is built on) and force an early reload the instant
+// usage looks like a leak, rather than waiting out the rest of the hour.
+// Cheap insurance to add even without direct evidence of a JS-side leak
+// in THIS board's own code -- unsupported browsers just skip it.
+function checkMemoryWatchdog(){
+  if (!(window.performance && performance.memory)) return;
+  const used = performance.memory.usedJSHeapSize;
+  const limit = performance.memory.jsHeapSizeLimit;
+  if (limit && used / limit > 0.85){
+    console.warn('Memory watchdog: JS heap usage high (' + Math.round(used / 1048576) + 'MB) -- forcing an early reload.');
+    attemptReload(10);
+  }
 }
 
 /* =========================================================================
@@ -1646,7 +1656,8 @@ function init(){
     }
   });
 
-  scheduleDailyReload();
+  scheduleReload();
+  setInterval(checkMemoryWatchdog, 5 * 60 * 1000);
 
   fetchNewsTicker();
   setInterval(fetchNewsTicker, CONFIG.news.refreshMs);
