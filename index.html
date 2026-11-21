@@ -683,24 +683,6 @@
   <source type="video/webm" src="data:video/webm;base64,GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJChYECGFOAZwEAAAAAAAH7EU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHYTbuMU6uEElTDZ1OsggEeTbuMU6uEHFO7a1OsggHl7AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmsirXsYMPQkBNgI1MYXZmNjAuMTYuMTAwV0GNTGF2ZjYwLjE2LjEwMESJiECfQAAAAAAAFlSua8GuAQAAAAAAADjXgQFzxYh2hUetk/tq0JyBACK1nIN1bmSIgQCGhVZfVlA4g4EBI+ODhDuaygDgibCBArqBApqBAhJUw2f8c3OgY8CAZ8iaRaOHRU5DT0RFUkSHjUxhdmY2MC4xNi4xMDBzc9ZjwItjxYh2hUetk/tq0GfIoUWjh0VOQ09ERVJEh5RMYXZjNjAuMzEuMTAyIGxpYnZweGfIoUWjiERVUkFUSU9ORIeTMDA6MDA6MDIuMDAwMDAwMDAwAB9DtnXB54EAo6KBAACAEAIAnQEqAgACAAvHCIWFiJmEiD+CAAwNYAD+5rUAo5iBA+gAsQEALxH8ABgAMD/0DAAAAP7mtQAcU7trkbuPs4EAt4r3gQHxggGf8IED">
 </video>
 
-<!-- TEMPORARY diagnostic badge (not a permanent board feature): shows
-     which keep-awake mechanism actually ended up active on THIS specific
-     device -- "Wake Lock" (no continuous video decoding at all) vs
-     "video fallback" (the OS/WebView doesn't support/allow the Wake
-     Lock API, so the always-looping decoder below is what's keeping the
-     screen on). This exists to help pin down whether the ~18-21h
-     crashes on weak hardware are related to long-running video decode
-     specifically. Deliberately tiny and low-opacity so it doesn't
-     bother anyone looking at the board; remove this div (and the
-     showKeepAwakeDebugBadge() call near the end of the script) once
-     that question is settled. -->
-<!-- Positioned well inside the typical TV overscan-safe area (not at
-     the literal screen edge, where a real TV's overscan crop tends to
-     hide a few percent of the picture) and sized to actually read from
-     across a room, since this is temporary diagnostic instrumentation,
-     not a permanent on-screen element. -->
-<div id="keepAwakeDebugBadge" style="position:fixed;bottom:60px;left:60px;font-size:20px;color:rgba(255,255,255,0.55);z-index:9999;pointer-events:none;font-family:monospace;background:rgba(0,0,0,0.3);padding:4px 8px;border-radius:4px;"></div>
-
 <script>
 /* =========================================================================
    ================  תצורה לעריכה קלה / EDITABLE CONFIG  =================
@@ -1518,12 +1500,6 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-function showKeepAwakeDebugBadge(wakeLockActive){
-  const el = document.getElementById('keepAwakeDebugBadge');
-  if (!el) return;
-  el.textContent = wakeLockActive ? 'Wake: Lock API (no video loop running)' : 'Wake: video fallback (Lock API unavailable/failed)';
-}
-
 function keepAwakeVideoTick(){
   const v = document.getElementById('keepAwakeVideo');
   if (!v) return;
@@ -1641,7 +1617,6 @@ function init(){
   window.addEventListener('resize', fitStage);
 
   requestWakeLock().then(wakeLockActive => {
-    showKeepAwakeDebugBadge(wakeLockActive);
     if (!wakeLockActive){
       keepAwakeVideoTick();
       setInterval(keepAwakeVideoTick, 60 * 1000);
