@@ -1524,22 +1524,6 @@ function showKeepAwakeDebugBadge(wakeLockActive){
   el.textContent = wakeLockActive ? 'Wake: Lock API (no video loop running)' : 'Wake: video fallback (Lock API unavailable/failed)';
 }
 
-// See the hidden <video id="keepAwakeVideo"> above — this used to run
-// UNCONDITIONALLY alongside the Wake Lock API as pure belt-and-
-// suspenders, on the assumption that a muted, 1x1px, looping video
-// costs effectively nothing. That was tightened to only start when
-// requestWakeLock() reports failure/unsupported, while investigating
-// whether continuous hardware video decoding on weak SoCs was behind the
-// multi-hour crash. UPDATE: a direct comparison against two other boards
-// on the same TV Bro/streamer hardware that are confirmed to survive a
-// full week found BOTH of them run this exact pattern (Wake Lock request
-// AND an unconditional autoplay video loop, simultaneously, all the
-// time) with no crash -- so the video loop itself is now a weak suspect.
-// The gating stays (it's strictly cheaper, never more, than running
-// unconditionally) but the real fix that mattered was the reload cadence
-// -- see scheduleReload() and checkMemoryWatchdog() below. If it ever
-// stalls (some embedded browsers pause background video unpredictably),
-// re-kick it periodically rather than trusting `loop` alone.
 function keepAwakeVideoTick(){
   const v = document.getElementById('keepAwakeVideo');
   if (!v) return;
@@ -1558,17 +1542,25 @@ function keepAwakeVideoTick(){
 // interaction with it).
 //
 // Cadence: this used to be a fixed 2x/day schedule (04:00 + 16:00, a
-// ~12h worst-case gap), chosen to stay under an ~18h instability point
-// seen in one controlled test. A real-device run WITH that 2x/day
-// schedule already in place still crashed at ~21h, so a 12h gap is not
-// short enough. A direct side-by-side comparison against two other
-// boards on the SAME TV Bro/streamer hardware that are confirmed to run
-// a full WEEK with no crash found the one structural difference that
-// matters: both of them reload on a simple rolling ~1-HOUR timer, not
-// once or twice a day at fixed clock times. Matching that proven cadence
-// here instead of a longer guessed interval -- a brief, sub-second
-// reload flash once an hour is a trade worth making against a board that
-// goes dark for hours until someone notices and power-cycles it.
+// ~12h worst-case gap); a real-device run with that schedule crashed at
+// ~21h. Switched to a rolling 1-hour timer (matching two other boards on
+// the same TV Bro/streamer hardware confirmed stable for a week) plus the
+// memory watchdog below -- but a real-device run WITH both of those in
+// place still crashed at ~18h, the same window as before. So the crash
+// is NOT simply "too long between reloads" or "JS heap grows past a
+// limit" -- reloading hourly and forcing early reloads on JS heap
+// pressure didn't move the failure point at all. That points away from
+// this page's own JS and toward something a plain in-process
+// location.reload() doesn't actually clear: native/GPU-level memory tied
+// to the WebView itself (e.g. decoded image/compositor layers, the video
+// element's decoder), the TV Bro app/version on this box, or something at
+// the streamer/Android-OS level (background process limits, thermal
+// throttling, an LMK-style kill). Worth pulling actual device logs
+// (logcat, if ADB access to the streamer is possible) during a run to see
+// what the OS/TV Bro actually report at the moment of the reset, rather
+// than continuing to guess from this file alone. The reload+watchdog
+// mechanism is left in place regardless -- it's still a reasonable safety
+// net, just not the full fix.
 const RELOAD_INTERVAL_MS = 60 * 60 * 1000; // 1 hour, matching the two boards confirmed stable for a week
 function scheduleReload(){
   setTimeout(() => attemptReload(60), RELOAD_INTERVAL_MS);
@@ -1611,14 +1603,14 @@ function attemptReload(retriesLeft){
     });
 }
 
-// JS heap memory watchdog, also taken directly from the two boards
-// confirmed to survive a full week on the same hardware: neither relies
-// solely on a timed reload to stay healthy -- both also watch the page's
-// own JS heap (performance.memory; Chromium-only, which is exactly what
-// TV Bro's WebView is built on) and force an early reload the instant
-// usage looks like a leak, rather than waiting out the rest of the hour.
-// Cheap insurance to add even without direct evidence of a JS-side leak
-// in THIS board's own code -- unsupported browsers just skip it.
+// JS heap memory watchdog -- forces an early reload if the page's own JS
+// heap (performance.memory; Chromium-only) looks like it's leaking,
+// rather than waiting out the rest of the hour. Note: a real-device run
+// with this active still crashed at the same ~18h mark as before, so
+// whatever is actually failing on this hardware is apparently NOT
+// visible in the JS heap (it's likely native/GPU memory, or something
+// outside this page's JS entirely) -- kept anyway as cheap insurance,
+// but don't treat a healthy reading here as proof the device is fine.
 function checkMemoryWatchdog(){
   if (!(window.performance && performance.memory)) return;
   const used = performance.memory.usedJSHeapSize;
